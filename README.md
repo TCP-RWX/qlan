@@ -28,13 +28,13 @@ Dependencies:
 Steps for compilation:
 1. Clone the repo
 ```
-git clone https://github.com/TCP-RWX/quick-lan
+git clone https://github.com/TCP-RWX/qlan
 ```
 2. Compile
 ```
 make
 ```
-3. Install command
+3. Install (optional)
 ```
 make install
 ```
@@ -109,15 +109,16 @@ Hello World!
 This text is being sent over LAN!
 ```
 
-# Disclaimer
-Do not use this tool on networks you don't trust!
+> [!CAUTION]
+> Do not use this tool on networks you don't trust!
 Everything transferred using this program is unencrypted and all data sent be easily be seen using a 
 network packet analyzer tool such as wireshark.
 
 # Future improvements
-* IPv6 support
-* TLS support
-* Multiple simultaneous transfers
-* Dedicated `-f` switch for transferring files
-* Better error handling
-* Time sensitive transfer codes
+- [ ] IPv6 support
+- [ ] TLS support
+- [ ]  Multiple simultaneous transfers
+- [ ] Dedicated `-f` switch for transferring files
+- [ ] Better error handling
+- [ ] Time sensitive transfer codes
+- [ ] Verbose `-v` swtich

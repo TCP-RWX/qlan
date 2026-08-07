@@ -31,7 +31,7 @@
 
 #define BROADCAST_PORT 4444
 #define TRANSFER_PORT 3333
-#define MAGIC "LJ_001"
+#define MAGIC "QL_001"
 
 #define CODE_LENGTH 4
 
@@ -72,6 +72,8 @@ int genCode()
     return code;
 }
 
+int enable = 1;
+
 void senderMode()
 {
     int codeLocal = genCode();
@@ -85,6 +87,9 @@ void senderMode()
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(BROADCAST_PORT);
+
+    if (setsockopt(broadcastFd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) != 0)
+        die("setsockopt");
 
     if (bind(broadcastFd, (struct sockaddr*)&addr, sizeof(addr) ) != 0)
         die("bind");
@@ -110,8 +115,7 @@ void senderMode()
             if (transferFd < 0)
                 die("socket");
 
-            int enable = 1;
-            if (setsockopt(transferFd, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable)) != 0)
+            if (setsockopt(transferFd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) != 0)
                 die("setsockopt");
 
             if (bind(transferFd, (struct sockaddr*)&addr, sizeof(addr)) != 0)
@@ -147,14 +151,11 @@ void receiverMode(char* arg_code)
     addr.sin_family = AF_INET;
     addr.sin_port = htons(BROADCAST_PORT);
 
-    int enable = 1;
     if (setsockopt(broadcastFd, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable)) != 0)
         die("setsockopt");
 
     memcpy(bcMsg, MAGIC, sizeof(MAGIC));
     *(int*)(bcMsg + sizeof(MAGIC)-1) = code;
-
-    printf("%d\n", *(int*)(bcMsg + sizeof(MAGIC)-1));
 
     if (sendto(broadcastFd, bcMsg, BC_MSG_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) < 0)
         die("sendto");
