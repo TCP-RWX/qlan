@@ -1,7 +1,7 @@
 
-# Quick Lan
+# Quick LAN
 
-Quick Lan (QLAN) is a lightweight, command-line utility for easy and convenient file transfer between two computers on the same local network. This utility does 
+Quick LAN (QLAN) is a lightweight, command-line utility for easy and convenient file transfer between two computers on the same local network. This utility does 
 not require you to know the IP address of or manually configure any devices involved in the data transfer. 
 
 This program uses a UDP broadcast to discover the sender and then establishes a TCP connection to transfer data reliably.
