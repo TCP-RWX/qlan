@@ -6,6 +6,8 @@ not require you to know the IP address of or manually configure any devices invo
 
 This program uses a UDP broadcast to discover the sender and then establishes a TCP connection to transfer data reliably.
 
+[![qLAN Demonstration video](https://i9.ytimg.com/vi/6aB6jM5mpU0/mqdefault.jpg?sqp=CKyz8tMG-oaymwEmCMACELQB8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGEYgICh_MA8=&rs=AOn4CLAvSAll4npN5nol93_a0iTv4xm8Uw)](https://www.youtube.com/watch?v=6aB6jM5mpU0)
+
 # How it works
 The device sending the data is called the sender, while the device receiving the data is the receiver.
 
