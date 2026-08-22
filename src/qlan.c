@@ -8,37 +8,24 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <arpa/inet.h>
-
-// this program has two modes (sender and receiver mode)
-
-/* Sender mode:
-    - read from stdin
-    - generate 4 digit code
-
-    - enter lsiten mode for broadcast from receiver
-    - upon receiving broadcast message, connect to receiver and send the input to receiver
-*/
-
-/* Receiver mode:
-    - receive 4 digit code from user
-    - craft broadcast message with 4 digit code
-
-    - send broadcast
-    - enter listen mode for input
-    - receive input
-    - write input to stdout
-*/
+#include <sys/uio.h>
 
 #define BROADCAST_PORT 4444
 #define TRANSFER_PORT 3333
-#define MAGIC "QL_001"
 
 #define CODE_LENGTH 4
-
-#define BC_MSG_SIZE sizeof(MAGIC) + sizeof(int)
 #define TRANSFER_BUF_SIZE 128
 
-char bcMsg[BC_MSG_SIZE];             // broadcast msg buffer
+#define PROTOCOL_VERSION (uint32_t)2
+
+#define MAGIC (uint32_t)( (0xF5F20000) | PROTOCOL_VERSION )
+
+struct __attribute__((packed)) broadcast_msg 
+{
+    uint32_t magic;
+    uint16_t transfer_code;
+};
+
 int broadcastFd, transferFd, connFd; // file descriptors
 
 struct sockaddr_in addr, conn_addr;
@@ -52,9 +39,29 @@ void die(const char* msg)
     _exit(1);
 }
 
-int genCode()
+void send_broadcast_msg(int sock_fd, uint16_t code)
 {
-    int code=0;
+    struct broadcast_msg bcMsg;
+    bcMsg.magic = htonl(MAGIC);
+    bcMsg.transfer_code = htons(code);
+
+    if (sendto(sock_fd, &bcMsg, sizeof(bcMsg), 0, (struct sockaddr*)&addr, sizeof(addr)) != sizeof(bcMsg))
+        die("sendto");
+
+}
+
+void receive_broadcast_msg(int sock_fd, struct broadcast_msg *bcMsg)
+{
+    if (recvfrom(sock_fd, bcMsg, sizeof(*bcMsg), 0, (struct sockaddr*)&conn_addr, &len) != sizeof(*bcMsg))
+        die("recvfrom");
+
+    bcMsg->magic = ntohl(bcMsg->magic);
+    bcMsg->transfer_code = ntohs(bcMsg->transfer_code);
+}
+
+uint16_t genCode()
+{
+    uint16_t code=0;
     int genFd = open("/dev/urandom", O_RDONLY);
     if (genFd < 0)
         die("open");
@@ -65,7 +72,7 @@ int genCode()
         if (read(genFd, &n, sizeof(n)) <= 0)
             die("read");
 
-        code += (n % 10)*pow(10, i); 
+        code = code * 10 + (n % 10); 
     }
 
     close(genFd);
@@ -76,7 +83,7 @@ int enable = 1;
 
 void senderMode()
 {
-    int codeLocal = genCode();
+    uint16_t codeLocal = genCode();
     printf("transfer code: %d\n", codeLocal);
 
     // setup broadcast receiver
@@ -99,12 +106,13 @@ void senderMode()
     while (1)
     {
 
-    recvfrom(broadcastFd, bcMsg, BC_MSG_SIZE, 0, (struct sockaddr*)&conn_addr, &len);
+    struct broadcast_msg bcMsg;
+    receive_broadcast_msg(broadcastFd, &bcMsg);
 
     // interpet broadcast message
-    if (strncmp(bcMsg, MAGIC, sizeof(MAGIC)-1) == 0)
+    if (bcMsg.magic == MAGIC)
     {
-        int codeReceived = *(int*)(bcMsg+sizeof(MAGIC)-1);
+        uint16_t codeReceived = bcMsg.transfer_code;
 
         if (codeReceived == codeLocal)
         {
@@ -154,12 +162,7 @@ void receiverMode(char* arg_code)
     if (setsockopt(broadcastFd, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable)) != 0)
         die("setsockopt");
 
-    memcpy(bcMsg, MAGIC, sizeof(MAGIC));
-    *(int*)(bcMsg + sizeof(MAGIC)-1) = code;
-
-    if (sendto(broadcastFd, bcMsg, BC_MSG_SIZE, 0, (struct sockaddr*)&addr, sizeof(addr)) < 0)
-        die("sendto");
-
+    send_broadcast_msg(broadcastFd, code);
     close(broadcastFd);
 
     addr.sin_addr.s_addr = INADDR_ANY;
@@ -170,9 +173,6 @@ void receiverMode(char* arg_code)
     transferFd = socket(AF_INET, SOCK_STREAM, 0);
     if (transferFd < 0)
         die("socket");
-
-    enable = 1;
-    setsockopt(transferFd, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable));
 
     if (bind(transferFd, (struct sockaddr*)&addr, sizeof(addr)) != 0)
         perror("bind");
