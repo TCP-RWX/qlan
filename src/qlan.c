@@ -9,6 +9,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/uio.h>
+#include <stdarg.h>
+#include <stdint.h>
 
 #define BROADCAST_PORT 4444
 #define TRANSFER_PORT 3333
@@ -16,8 +18,9 @@
 #define CODE_LENGTH 4
 #define TRANSFER_BUF_SIZE 128
 
-#define PROTOCOL_VERSION (uint32_t)2
+#define VERSION "v0.0.3"
 
+#define PROTOCOL_VERSION (uint32_t)2
 #define MAGIC (uint32_t)( (0xF5F20000) | PROTOCOL_VERSION )
 
 struct __attribute__((packed)) broadcast_msg 
@@ -37,6 +40,26 @@ void die(const char* msg)
 {
     perror(msg);
     _exit(1);
+}
+
+uint8_t opt_mask = 0;
+enum OPT_FLAGS
+{
+    FLAG_SEND = (1 << 0),
+    FLAG_RECV = (1 << 1),
+    FLAG_VERBOSE = (1 << 2),
+};
+
+void log_verbose(const char* format, ...)
+{
+    if (opt_mask & FLAG_VERBOSE)
+    {
+        va_list args;
+        va_start(args, format);
+
+        vprintf(format, args);
+        va_end(args);
+    }
 }
 
 void send_broadcast_msg(int sock_fd, uint16_t code)
@@ -83,9 +106,12 @@ int enable = 1;
 
 void senderMode()
 {
-    uint16_t codeLocal = genCode();
-    printf("transfer code: %d\n", codeLocal);
+    log_verbose("Generating code...\n");
 
+    uint16_t codeLocal = genCode();
+    printf("transfer code: %04u\n", codeLocal);
+
+    log_verbose("Creating socket to listen for broadcast...\n");
     // setup broadcast receiver
     broadcastFd = socket(AF_INET, SOCK_DGRAM, 0);
     if (broadcastFd < 0)
@@ -95,9 +121,11 @@ void senderMode()
     addr.sin_family = AF_INET;
     addr.sin_port = htons(BROADCAST_PORT);
 
+    log_verbose("Enabling SO_REUSEADDR\n");
     if (setsockopt(broadcastFd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) != 0)
         die("setsockopt");
 
+    log_verbose("Binding socket\n");
     if (bind(broadcastFd, (struct sockaddr*)&addr, sizeof(addr) ) != 0)
         die("bind");
 
@@ -107,30 +135,45 @@ void senderMode()
     {
 
     struct broadcast_msg bcMsg;
+
+    log_verbose("Waiting for broadcast message...\n");
     receive_broadcast_msg(broadcastFd, &bcMsg);
 
+    log_verbose("Comparing magic numbers...\n");
     // interpet broadcast message
-    if (bcMsg.magic == MAGIC)
+    if ( (bcMsg.magic >> 16) == (MAGIC >> 16) )
     {
+        if ( (bcMsg.magic & (uint32_t)0x0000ffff) != (PROTOCOL_VERSION) )
+        {
+            fprintf(stderr, "Receiver is using an incompatible protocol version\nPlease ensure both instances use the same protocol version\n");
+            exit(EXIT_FAILURE);
+        }
+
+        log_verbose("Magic number is correct\n");
         uint16_t codeReceived = bcMsg.transfer_code;
 
         if (codeReceived == codeLocal)
         {
             close(broadcastFd);
 
+            log_verbose("Creating TCP socket...\n");
             conn_addr.sin_port = htons(TRANSFER_PORT);
             transferFd = socket(AF_INET, SOCK_STREAM, 0);
             if (transferFd < 0)
                 die("socket");
 
+            log_verbose("Enabling SO_REUSEADDR...\n");
             if (setsockopt(transferFd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) != 0)
                 die("setsockopt");
 
             if (bind(transferFd, (struct sockaddr*)&addr, sizeof(addr)) != 0)
                 die("bind");
 
+            log_verbose("Connecting for receiver...\n");
             if (connect(transferFd, (struct sockaddr*)&conn_addr, sizeof(conn_addr) ) != 0)
                 die("connect");
+
+            log_verbose("Connection established\n");
 
             int n;
             while ( (n = read(STDIN_FILENO, buf, TRANSFER_BUF_SIZE)) > 0)
@@ -151,6 +194,7 @@ void receiverMode(char* arg_code)
     int code = atoi(arg_code);
 
     // setup sockets
+    log_verbose("Creating datagram socket\n");
     broadcastFd = socket(AF_INET, SOCK_DGRAM, 0);
     if (broadcastFd < 0)
         die("socket");
@@ -159,9 +203,11 @@ void receiverMode(char* arg_code)
     addr.sin_family = AF_INET;
     addr.sin_port = htons(BROADCAST_PORT);
 
+    log_verbose("Enabling SO_BROADCAST\n");
     if (setsockopt(broadcastFd, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable)) != 0)
         die("setsockopt");
 
+    log_verbose("Sending broadcast message\nAwaiting response...\n");
     send_broadcast_msg(broadcastFd, code);
     close(broadcastFd);
 
@@ -170,20 +216,25 @@ void receiverMode(char* arg_code)
     addr.sin_port = htons(TRANSFER_PORT);
 
     // listen for a response
+    log_verbose("Creating TCP socket\n");
     transferFd = socket(AF_INET, SOCK_STREAM, 0);
     if (transferFd < 0)
         die("socket");
 
+    log_verbose("Binding TCP socket\n");
     if (bind(transferFd, (struct sockaddr*)&addr, sizeof(addr)) != 0)
-        perror("bind");
+        die("bind");
 
     listen(transferFd, 1);
 
 
     int len = sizeof(conn_addr);
+    log_verbose("Awaiting connection...\n");
     int conn_fd = accept(transferFd, (struct sockaddr*)&conn_addr, &len);
     if (conn_fd < 0)
         die("accept");
+
+    log_verbose("Connection established.\n");
 
     int n;
     while ( (n = read(conn_fd, buf, TRANSFER_BUF_SIZE)) > 0)
@@ -198,8 +249,20 @@ void help(int status, char const* program_name)
     printf("Conveniently transfer data over LAN\n");
     printf("\t-s\t\tSend mode\n");
     printf("\t-r [code]\tReceive mode\n");
+    printf("\t-v \t\tVerbose\n");
+    printf("\t-V \t\tVersion\n");
 
     exit(status);
+}
+
+
+char code[5] = {0};
+
+void show_version()
+{
+    printf("QLAN version: %s\n", VERSION);
+    printf("Protocol version: v%u\n", PROTOCOL_VERSION);
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char *argv[])
@@ -209,25 +272,50 @@ int main(int argc, char *argv[])
     if (argc == 1)
         help(1, argv[0]);
 
-    while ( (opt = getopt(argc, argv, "sr:h")) != -1)
+    while ( (opt = getopt(argc, argv, "sr:hvV")) != -1)
     {
         switch (opt)
         {
         case 's':
-            senderMode();
+            opt_mask |= FLAG_SEND;
             break;
         
         case 'r':
-            receiverMode(optarg);
+            opt_mask |= FLAG_RECV;
+            strncpy(code, optarg, 4);
             break;
 
         case 'h':
             help(EXIT_SUCCESS, argv[0]);
             break;
 
+        case 'v':
+            opt_mask |= FLAG_VERBOSE;
+            break;
+
+        case 'V':
+            show_version();
+            break;
+
         default:
             help(EXIT_FAILURE, argv[0]);
             break;
         }
+    }
+
+    if ( (opt_mask & (FLAG_RECV | FLAG_SEND)) == (FLAG_RECV | FLAG_SEND) )
+        {
+            fprintf(stderr, "You cannot enable both sender and receiver mode at once\n");
+            exit(1);
+        }
+    else
+    if (opt_mask & FLAG_RECV)
+    {
+        receiverMode(code);
+    }
+    else
+    if (opt_mask & FLAG_SEND)
+    {
+        senderMode();
     }
 }

@@ -125,4 +125,3 @@ network packet analyzer tool such as wireshark.
 - [ ] Dedicated `-f` switch for transferring files
 - [ ] Better error handling
 - [ ] Time sensitive transfer codes
-- [ ] Verbose `-v` swtich
