@@ -17,7 +17,7 @@
 #define VERSION "v0.0.4"
 
 #define MAGIC_PREFIX (uint32_t)(0xF5F20000)
-#define PROTOCOL_VERSION (uint32_t)3
+#define PROTOCOL_VERSION (uint32_t)4
 #define MAGIC (uint32_t)( MAGIC_PREFIX | PROTOCOL_VERSION )
 
 struct __attribute__((packed)) broadcast_msg 
