@@ -8,12 +8,12 @@ This program uses a UDP broadcast to discover the sender and then establishes a 
 
 ## Demonstration video
 
-[![qLAN Demonstration video](https://i9.ytimg.com/vi/6aB6jM5mpU0/mqdefault.jpg?sqp=CKyz8tMG-oaymwEmCMACELQB8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGEYgICh_MA8=&rs=AOn4CLAvSAll4npN5nol93_a0iTv4xm8Uw)](https://www.youtube.com/watch?v=6aB6jM5mpU0)
+[![qLAN Demonstration video](https://i3.ytimg.com/vi/6aB6jM5mpU0/maxresdefault.jpg)](https://www.youtube.com/watch?v=6aB6jM5mpU0)
 
 # How it works
 The device sending the data is called the sender, while the device receiving the data is the receiver.
 
-The sender generates a 4-digit code, this code will be used later to pair the two devices.
+The sender generates a 4-digit hexadecimal code, this code will be used later to pair the two devices.
 From there, the sender will then wait for the broadcast packet sent from the receiver.
 
 The receiver takes the 4-digit code from the user, and then uses this code to craft the broadcast message.
@@ -52,10 +52,11 @@ qlan -h
 Example output:
 ```
 Usage: qlan [OPTION]
-Conveniently transfer infomation over LAN
+Conveniently transfer data over LAN
         -s              Send mode
         -r [code]       Receive mode
-
+        -v              Verbose
+        -V              Version
 ```
 
 
@@ -125,3 +126,4 @@ network packet analyzer tool such as wireshark.
 - [ ] Dedicated `-f` switch for transferring files
 - [ ] Better error handling
 - [ ] Time sensitive transfer codes
+- [ ] Compatibility with Windows

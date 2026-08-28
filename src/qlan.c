@@ -4,24 +4,21 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <fcntl.h>
-#include <math.h>
-#include <sys/mman.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <sys/uio.h>
 #include <stdarg.h>
 #include <stdint.h>
 
 #define BROADCAST_PORT 4444
 #define TRANSFER_PORT 3333
 
-#define CODE_LENGTH 4
-#define TRANSFER_BUF_SIZE 128
+#define TRANSFER_BUF_SIZE 1024
 
-#define VERSION "v0.0.3"
+#define VERSION "v0.0.4"
 
-#define PROTOCOL_VERSION (uint32_t)2
-#define MAGIC (uint32_t)( (0xF5F20000) | PROTOCOL_VERSION )
+#define MAGIC_PREFIX (uint32_t)(0xF5F20000)
+#define PROTOCOL_VERSION (uint32_t)3
+#define MAGIC (uint32_t)( MAGIC_PREFIX | PROTOCOL_VERSION )
 
 struct __attribute__((packed)) broadcast_msg 
 {
@@ -84,19 +81,21 @@ void receive_broadcast_msg(int sock_fd, struct broadcast_msg *bcMsg)
 
 uint16_t genCode()
 {
-    uint16_t code=0;
+    uint16_t code;
+
     int genFd = open("/dev/urandom", O_RDONLY);
     if (genFd < 0)
         die("open");
 
-    unsigned char n;
-    for (int i = 0; i < CODE_LENGTH; i++)
+    ssize_t n;
+    if ((n = read(genFd, &code, sizeof(code))) < sizeof(code))
     {
-        if (read(genFd, &n, sizeof(n)) <= 0)
+        if (n < 0)
             die("read");
-
-        code = code * 10 + (n % 10); 
-    }
+        
+        fprintf(stderr, "failed to generate transfer code: partial read\n");
+        exit(EXIT_FAILURE);
+    }    
 
     close(genFd);
     return code;
@@ -109,7 +108,7 @@ void senderMode()
     log_verbose("Generating code...\n");
 
     uint16_t codeLocal = genCode();
-    printf("transfer code: %04u\n", codeLocal);
+    printf("transfer code: %04X\n", codeLocal);
 
     log_verbose("Creating socket to listen for broadcast...\n");
     // setup broadcast receiver
@@ -150,9 +149,8 @@ void senderMode()
         }
 
         log_verbose("Magic number is correct\n");
-        uint16_t codeReceived = bcMsg.transfer_code;
 
-        if (codeReceived == codeLocal)
+        if (bcMsg.transfer_code == codeLocal)
         {
             close(broadcastFd);
 
@@ -191,7 +189,13 @@ void senderMode()
 
 void receiverMode(char* arg_code)
 {
-    int code = atoi(arg_code);
+    char *endptr = NULL;
+    uint16_t code = strtoul(arg_code, &endptr, 16);
+    if (*endptr != '\0')
+    {
+        fprintf(stderr, "invalid transfer code\n");
+        exit(EXIT_FAILURE);
+    }
 
     // setup sockets
     log_verbose("Creating datagram socket\n");
@@ -245,7 +249,7 @@ void receiverMode(char* arg_code)
 
 void help(int status, char const* program_name)
 {
-    printf("Usage: %s [OPTION]\n", program_name);
+    printf("Usage: %s [OPTION], ...\n", program_name);
     printf("Conveniently transfer data over LAN\n");
     printf("\t-s\t\tSend mode\n");
     printf("\t-r [code]\tReceive mode\n");
